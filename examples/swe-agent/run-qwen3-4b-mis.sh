@@ -54,18 +54,18 @@ PERF_ARGS=(
 )
 
 ROLLOUT_ARGS=(
-    --prompt-data /root/example.jsonl
+    --prompt-data /root/swe_train.jsonl
     --input-key prompt
     --metadata-key metadata
     --rollout-shuffle
-    --num-rollout 1
+    --num-rollout 8
     --rollout-batch-size 1
-    --n-samples-per-prompt 1
+    --n-samples-per-prompt 2
     --rollout-temperature 0.8
     --rollout-top-p 1.0
     --rollout-max-response-len 2048
     
-    --global-batch-size 1
+    --global-batch-size 2
     # --balance-data
 )
 
@@ -143,7 +143,6 @@ RUNTIME_ENV_JSON="{
 
 echo "Launching training..."
 echo "  SWE Agent URL: ${SWE_AGENT_GYM_URL}"
-echo "  Data: /root/example.jsonl"
 
 ray job submit --address="http://127.0.0.1:8265" \
     --runtime-env-json="${RUNTIME_ENV_JSON}" \
