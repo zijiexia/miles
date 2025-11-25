@@ -75,7 +75,7 @@ For **miles docker** setup, please follow the standard setup process.
 In **miles docker**, download **SWE-Gym** data from huggingface and convert it to Miles' prompt data format with this script.
 ```
 cd miles/examples/swe-agent
-python download_and_process_data.py --input SWE-Gym/SWE-Gym --output root/swe_train.jsonl
+python download_and_process_data.py --input SWE-Gym/SWE-Gym --output /root/swe_train.jsonl
 ```
 
 ### Running train
