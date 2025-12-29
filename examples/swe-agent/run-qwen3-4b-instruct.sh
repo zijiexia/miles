@@ -27,13 +27,13 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
 export SWE_AGENT_GYM_URL="${SWE_AGENT_GYM_URL:-http://swe_env:11000}"
 
-source "/workspace/swe-agent/miles/scripts/models/qwen3-4B-Instruct-2507.sh"
+source "${SCRIPT_DIR}/../../scripts/models/qwen3-4B-Instruct-2507.sh"
 
 CKPT_ARGS=(
-    --hf-checkpoint /root/Qwen3-4B-nothink
-    --ref-load /root/Qwen3-4B-nothink_torch_dist
+    --hf-checkpoint /root/qwen3-4B-Instruct-2507
+    --ref-load /root/qwen3-4B-Instruct-2507_torch_dist
     # --load /path/to/checkpoint/
-    --save /root/Qwen3-4B-nothink_miles/
+    --save /root/qwen3-4B-Instruct-2507_miles/
     --save-interval 100
 )
 
