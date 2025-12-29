@@ -1,4 +1,17 @@
+### Introduction
+
+This is an example for SWE-agent training. This example uses NVIDIA's Nemo-Gym as the Gym environment implement, SWE-Gym as the training data, and SWE-bench as the evaluation.
+
+This implementation of this example is partially in submodules below:
+- Nemo-Gym: https://github.com/yueming-yuan/Gym/tree/miles-swe-agent
+- mini-swe-agent: https://github.com/yueming-yuan/nv-mini-swe-agent/tree/miles-swe-agent
+
+
 ### Prepare environment
+#### Update submodules
+```bash
+git submodule update --init --recursive .
+```
 #### Docker settings
 ```bash
 # 1. create a docker network
@@ -81,6 +94,8 @@ python download_and_process_data.py --input SWE-Gym/SWE-Gym --output /root/swe_t
 ### Running train
 1. In environment docker, launch the agent server
 ```bash
+cd Gym
+source .venv/bin/activate
 cd responses_api_agents/mini_swe_agent
 ./start_server.sh
 ```
@@ -98,3 +113,18 @@ bash examples/swe-agent/run-qwen3-4b-mis.sh
 ### Troubleshooting
 1. The first time of every SWE environment can be slow, and may need to wait before generation, because each SWE-Gym task has a specific docker, and `docker pull` takes time.
 1. Sometimes the environment may also be slow at evaluation. The timeout of evaluation is 10 minutes by default. If the server is stuck at `[EVAL]<instance> Running eval`, you may need to wait for it.
+
+## Metrics
+```
+agent/turns_mean, agent/turns_sum - Turn counts
+agent/tool_calls_mean, agent/tool_calls_sum - Tool call counts
+agent/total_time_mean/max/min - Total time statistics
+agent/model_query_time_sum_mean - Avg total model time per rollout
+agent/env_execution_time_sum_mean - Avg total env time per rollout
+agent/eval_time_mean - Avg evaluation time
+agent/overhead_time_mean - Avg overhead time
+agent/time_per_turn - Avg time per turn
+agent/model_query_time_avg - Avg model query time per turn
+agent/env_execution_time_avg - Avg env execution time per turn
+agent/model_time_ratio, agent/env_time_ratio - Time ratios
+```
