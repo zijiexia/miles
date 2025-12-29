@@ -62,11 +62,10 @@ ROLLOUT_ARGS=(
     --rollout-batch-size 8
     --n-samples-per-prompt 8
     --rollout-temperature 0.8
-    --rollout-top-p 1.0
-    --rollout-max-response-len 2048
+    --rollout-max-response-len 8192
     
     --global-batch-size 64
-    # --balance-data
+    --balance-data
 )
 
 EVAL_ARGS=(
@@ -126,11 +125,13 @@ MISC_ARGS=(
 CUSTOM_ARGS=(
     --custom-generate-function-path generate_with_swe_agent.generate
     --custom-rm-path generate_with_swe_agent.reward_func
+    --rollout-function-path generate_with_swe_agent.generate_rollout
+    --dynamic-sampling-filter-path generate_with_swe_agent.dynamic_filter
 )
 
 export MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
 echo "Starting Ray cluster at ${MASTER_ADDR}..."
-ray start --head --node-ip-address ${MASTER_ADDR} --num-gpus 8 --disable-usage-stats --dashboard-host=0.0.0.0 --dashboard-port=8265
+ray start --head --node-ip-address ${MASTER_ADDR} --num-gpus 4 --disable-usage-stats --dashboard-host=0.0.0.0 --dashboard-port=8265 --port=8899
 
 RUNTIME_ENV_JSON="{
   \"env_vars\": {
@@ -148,7 +149,7 @@ ray job submit --address="http://127.0.0.1:8265" \
     --runtime-env-json="${RUNTIME_ENV_JSON}" \
     -- python3 train.py \
     --actor-num-nodes 1 \
-    --actor-num-gpus-per-node 8 \
+    --actor-num-gpus-per-node 4 \
     --colocate \
     ${MODEL_ARGS[@]} \
     ${CKPT_ARGS[@]} \

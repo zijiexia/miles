@@ -2,10 +2,23 @@
 # Minimal version: call Gym /run endpoint and return trajectory
 
 import os
+from argparse import Namespace
+from typing import Any, Callable, Union
+import logging
+from tqdm import tqdm
+import asyncio
+import json
+from pathlib import Path
 
-from miles.rollout.sglang_rollout import GenerateState
+from miles.rollout.base_types import RolloutFnEvalOutput, RolloutFnTrainOutput
+from miles.utils.async_utils import run
 from miles.utils.http_utils import post
 from miles.utils.types import Sample
+from miles.rollout.sglang_rollout import GenerateState, eval_rollout
+from miles.rollout.filter_hub.base_types import DynamicFilterOutput
+from miles.utils.misc import load_function
+
+logger = logging.getLogger(__name__)
 
 
 def build_tokens_and_mask_from_messages(
@@ -53,10 +66,9 @@ async def generate(args, sample: Sample, sampling_params) -> Sample:
     # Prepare request for Gym /run endpoint
     request = {
         "responses_create_params": {
-            "temperature": sampling_params.get("temperature", 0.0),
-            "top_p": sampling_params.get("top_p", 1.0),
             "input": [],
         },
+        "sampling_params": sampling_params,
         **sample.metadata,
         "sglang_url": f"http://{args.sglang_router_ip}:{args.sglang_router_port}/v1",
     }
@@ -64,8 +76,14 @@ async def generate(args, sample: Sample, sampling_params) -> Sample:
     gym_url = os.getenv("SWE_AGENT_GYM_URL", "http://localhost:11000")
     response = await post(f"{gym_url}/run", request)
 
+    exit_status = response.get("info", {}).get("exit_status", "")
+    print(f"exit_status: {exit_status}, reward: {response.get('reward', 0.0)}")
+    
     # Get messages from response
     messages = response.get("messages", [])
+    
+    if len(messages) >= 2:
+        sample.prompt = messages[:2]
 
     # Build tokens and loss_mask from messages
     state = GenerateState(args)
@@ -79,10 +97,24 @@ async def generate(args, sample: Sample, sampling_params) -> Sample:
     sample.loss_mask = loss_mask
     sample.response = response_text
     sample.response_length = response_length
-    sample.status = Sample.Status.COMPLETED
     sample.metadata["reward"] = response.get("reward", 0.0)
     sample.metadata["eval_report"] = response.get("metadata", {})
-    sample.metadata["messages"] = messages  # for test
+    sample.metadata["messages"] = messages
+    
+    # Extract agent metrics
+    agent_metrics = response.get("info", {}).get("agent_metrics", {})
+    sample.metadata["agent_metrics"] = agent_metrics
+
+    if exit_status == "Submitted":
+        sample.status = Sample.Status.COMPLETED
+    elif exit_status == "RolloutTruncated" or exit_status == "LimitsExceeded" or exit_status == "CollapseContinued":
+        sample.status = Sample.Status.TRUNCATED
+    else:
+        sample.status = Sample.Status.ABORTED
+        sample.reward = 0.0
+    
+    # TMP, for debugging
+    await save_sample_output(sample, messages)
 
     return sample
 
@@ -91,3 +123,134 @@ async def reward_func(args, sample: Sample, **kwargs) -> float:
     """Reward function - already computed in generate()"""
     reward = sample.metadata.get("reward", 0.0)
     return reward
+
+
+def dynamic_filter(args, samples: list[Sample], **kwargs) -> DynamicFilterOutput:
+    """Filter out groups with any aborted samples from training"""
+    has_aborted = any(sample.status == Sample.Status.ABORTED for sample in samples)
+    if has_aborted:
+        return DynamicFilterOutput(keep=False, reason="group_has_aborted")
+    return DynamicFilterOutput(keep=True)
+
+
+def aggregate_agent_metrics(samples: list[Sample]) -> dict:
+    """Aggregate agent metrics across samples for logging"""
+    metrics = {}
+    
+    # Collect all metrics
+    all_metrics = []
+    for sample in samples:
+        if hasattr(sample, 'metadata') and sample.metadata:
+            agent_metrics = sample.metadata.get('agent_metrics', {})
+            if agent_metrics:
+                all_metrics.append(agent_metrics)
+    
+    if not all_metrics:
+        return {}
+    
+    # Count metrics - mean and sum
+    for key in ["turns", "tool_calls"]:
+        values = [m.get(key, 0) for m in all_metrics]
+        if values:
+            metrics[f"agent/{key}_mean"] = sum(values) / len(values)
+            metrics[f"agent/{key}_sum"] = sum(values)
+    
+    # Time sum metrics - mean across rollouts
+    for key in ["model_query_time_sum", "env_execution_time_sum", "eval_time", "agent_run_time"]:
+        values = [m.get(key, 0) for m in all_metrics]
+        if values:
+            metrics[f"agent/{key}_mean"] = sum(values) / len(values)
+    
+    # Time avg metrics - mean of means
+    for key in ["time_per_turn", "model_query_time_avg", "env_execution_time_avg"]:
+        values = [m.get(key, 0) for m in all_metrics]
+        if values:
+            metrics[f"agent/{key}"] = sum(values) / len(values)
+    
+    # Ratio metrics (all based on total_time which includes eval)
+    for key in ["model_time_ratio", "env_time_ratio", "eval_time_ratio"]:
+        values = [m.get(key, 0) for m in all_metrics]
+        if values:
+            metrics[f"agent/{key}"] = sum(values) / len(values)
+    
+    # Total time stats
+    values = [m.get("total_time", 0) for m in all_metrics]
+    if values:
+        metrics["agent/total_time_mean"] = sum(values) / len(values)
+        metrics["agent/total_time_max"] = max(values)
+        metrics["agent/total_time_min"] = min(values)
+
+    print(f"agent metrics: {metrics}")
+    
+    return metrics
+
+
+
+async def generate_rollout_async(
+    args: Namespace, rollout_id: int, data_source: Callable[[int], list[list[Sample]]]
+) -> tuple[RolloutFnTrainOutput, list[list[Sample]]]:
+    """
+    Custom rollout function that wraps sglang_rollout.generate_rollout_async
+    and adds agent metrics aggregation.
+    """
+    # Import the base implementation
+    from miles.rollout.sglang_rollout import generate_rollout_async as base_generate_rollout_async
+    
+    # Call the base implementation
+    rollout_output, aborted_samples = await base_generate_rollout_async(args, rollout_id, data_source)
+    
+    # Aggregate agent metrics from all samples
+    all_samples = []
+    for group in rollout_output.samples:
+        # Handle both single samples and nested lists
+        if isinstance(group[0], list):
+            for sample_list in group:
+                all_samples.extend(sample_list)
+        else:
+            all_samples.extend(group)
+    
+    # Get agent metrics
+    agent_metrics = aggregate_agent_metrics(all_samples)
+    
+    # Merge with existing metrics
+    metrics = rollout_output.metrics or {}
+    metrics.update(agent_metrics)
+    
+    logger.info(f"Aggregated agent metrics for rollout {rollout_id}: {agent_metrics}")
+    
+    # Return with updated metrics
+    return RolloutFnTrainOutput(samples=rollout_output.samples, metrics=metrics), aborted_samples
+
+
+# TODO remove this temp function
+def generate_rollout(
+    args: Namespace, rollout_id: int, data_buffer: Any, evaluation: bool = False
+) -> Union[RolloutFnTrainOutput, RolloutFnEvalOutput]:
+    """An example to implement the generate_rollout function for an rule based rm rollout generation.
+
+    Args:
+        args: the whole args
+        rollout_id: int, the id of the rollout, used for deterministic data generation
+        data_buffer: the data buffer to store the generated samples
+        evaluation: bool, whether the rollout is for evaluation or not
+
+    Returns:
+        list[list[Sample]]: a list of list of samples generated by the rollout
+    """
+    output, aborted_samples = generate_abortable_samples(
+        args, rollout_id, data_buffer.get_samples, evaluation=evaluation
+    )
+    data_buffer.add_samples(aborted_samples)
+    return output
+
+
+def generate_abortable_samples(
+    args: Namespace,
+    rollout_id: int,
+    data_source: Callable[[int], list[list[Sample]]],
+    evaluation: bool = False,
+) -> tuple[Any, list[list[Sample]]]:
+    assert args.rollout_global_dataset
+    if evaluation:
+        return run(eval_rollout(args, rollout_id))
+    return run(generate_rollout_async(args, rollout_id, data_source))
