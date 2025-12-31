@@ -51,7 +51,7 @@ docker run -itd \
 
 docker exec -it miles_<your_name> /bin/bash
 
-apt update && apt install -y zsh curl git python3 python3-pip docker.io
+apt update && apt install -y zsh curl git python3 python3-pip
 ```
 note: `-v /var/run/docker.sock:/var/run/docker.sock` is required for Docker-in-Docker SWE environment execution; use `--network swe-net` to enable communication between training & environment.
 
