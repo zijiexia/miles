@@ -112,7 +112,7 @@ bash examples/swe-agent/run-qwen3-4b-instruct.sh
 
 ### Troubleshooting
 1. The first time of every SWE environment can be slow, and may need to wait before generation, because each SWE-Gym task has a specific docker, and `docker pull` takes time.
-1. Sometimes the environment may also be slow at evaluation. The timeout of evaluation is 10 minutes by default. If the server is stuck at `[EVAL]<instance> Running eval`, you may need to wait for it.
+2. Sometimes the environment may also be slow at evaluation. The timeout of evaluation is 10 minutes by default. If the server is stuck at `[EVAL]<instance> Running eval`, you may need to wait for it.
 
 ## Metrics
 ```
