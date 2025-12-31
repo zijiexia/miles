@@ -73,7 +73,7 @@ policy_api_key: your-openai-api-key
 policy_model_name: gpt-4.1-2025-04-14
 default_host: 0.0.0.0" > env.yaml
 ```
-note: set host IP to `0.0.0.0` to enable commnunications between dockers.
+note: set host IP to `0.0.0.0` to enable communications between dockers.
 
 then set up for SWE-agent server:
 ```bash
