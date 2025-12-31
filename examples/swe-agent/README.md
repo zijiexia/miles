@@ -106,7 +106,7 @@ cd responses_api_agents/mini_swe_agent
 (minor TODO: modify the port selections to avoid setting this every time.) (2) launch the training.
 ```bash
 export SWE_AGENT_GYM_URL="http://swe_env:<port_of_responses_api_agents>"
-bash examples/swe-agent/run-qwen3-4b-mis.sh
+bash examples/swe-agent/run-qwen3-4b-instruct.sh
 ```
 
 
