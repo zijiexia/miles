@@ -114,6 +114,8 @@ class SolverAgent(Agent):
     async def generate_initial_solution(self, args, problem_statement) -> str:
         """Generates the first solution attempt."""
         prompt = SOLVER_PROMPT_TEMPLATE.format(problem_statement=problem_statement)
+        if args.apply_chat_template:
+            prompt = [prompt]
         return await self.run(args, prompt, max_retries=3, key="solver")
 
 
@@ -135,6 +137,8 @@ class RewriterAgent(Agent):
             format_params[f"solution{i+1}"] = solution
 
         prompt = template.format(**format_params)
+        if args.apply_chat_template:
+            prompt = [prompt]
         return await self.run(args, prompt, max_retries=1, key="rewriter")
 
 
@@ -156,11 +160,13 @@ class SelectorAgent(Agent):
             format_params[f"solution{i+1}"] = solution
 
         prompt = template.format(**format_params)
+        if args.apply_chat_template:
+            prompt = [prompt]
         return await self.run(args, prompt, max_retries=10, key="selector")
 
     def extract_selected_solution_idx(self, response: str, candidate_solutions: list[str]) -> int:
         """Extracts the selected solution ID from the response."""
-        PATTERN = re.compile("Judgment:\s*(\d+)")
+        PATTERN = re.compile("Judgment:\\s*(\\d+)")
         matched = PATTERN.findall(response)
         try:
             selected_id = int(matched[0]) - 1

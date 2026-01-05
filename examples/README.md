@@ -4,11 +4,13 @@ Welcome to the `examples` directory. Here you can find various usage examples an
 
 ## Directory Structure
 
+- **[DrGRPO](./DrGRPO)**: Custom reducer for Dr.GRPO algorithm.
 - **[eval](./eval)**: Documentation and setup for evaluation environments using NeMo-Skills.
 - **[eval_multi_task](./eval_multi_task)**: Example for supporting OOD evaluation tasks e.g., GPQA, IFBench.
 - **[formal_math](./formal_math)**: Examples related to formal math reasoning tasks, including a single round demo.
 - **[fully_async](./fully_async)**: Demonstrates fully asynchronous rollout generation for higher efficiency.
 - **[geo3k_vlm](./geo3k_vlm)**: Training VLMs with FSDP on single-turn reasoning task using GRPO on the GEO3K dataset.
+- **[geo3k_vlm_multi_turn](./geo3k_vlm_multi_turn)**: VLM multi-turn training (FSDP backend) on Geo3k dataset.
 - **[low_precision](./low_precision)**: Examples of FP8 training and inference for improved throughput and stability.
 - **[multi_agent](./multi_agent)**: Example of running multi-agent reinforcement learning (RL) with `miles`.
 - **[on_policy_distillation](./on_policy_distillation)**: Example implementation for on-policy distillation, extending the reinforcement learning pipeline to support teacher–student distillation directly within on-policy training.
