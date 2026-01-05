@@ -1,3 +1,4 @@
+import os
 import miles.utils.external_utils.command_utils as U
 
 FEW_GPU = U.get_bool_env_var("MILES_TEST_FEW_GPU", "1")
@@ -124,4 +125,6 @@ def execute():
 
 if __name__ == "__main__":
     prepare()
+    for proxy_var in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
+        os.environ.pop(proxy_var, None)
     execute()

@@ -1,17 +1,19 @@
 import os
+
 import miles.utils.external_utils.command_utils as U
 
-ENABLE_EVAL = U.get_bool_env_var("MILES_TEST_ENABLE_EVAL", "1")
-TIGHT_DEVICE_MEMORY = U.get_bool_env_var("MILES_TEST_TIGHT_DEVICE_MEMORY", "1")
 
-MODEL_NAME = "GLM-Z1-9B-0414"
-MODEL_TYPE = "glm4-9B"
+ENABLE_EVAL = bool(int(os.environ.get("MILES_TEST_ENABLE_EVAL", "1")))
+TIGHT_HOST_MEMORY = bool(int(os.environ.get("MILES_TEST_TIGHT_HOST_MEMORY", "1")))
+
+MODEL_NAME = "Qwen3-4B"
+MODEL_TYPE = "qwen3-4B"
 NUM_GPUS = 8
 
 
 def prepare():
     U.exec_command("mkdir -p /root/models /root/datasets")
-    U.exec_command("hf download zai-org/GLM-Z1-9B-0414 --local-dir /root/models/GLM-Z1-9B-0414")
+    U.exec_command("hf download Qwen/Qwen3-4B --local-dir /root/models/Qwen3-4B")
     U.hf_download_dataset("zhuzilin/dapo-math-17k")
     U.hf_download_dataset("zhuzilin/aime-2024")
 
@@ -32,7 +34,7 @@ def execute():
         "--rollout-batch-size 8 "
         "--n-samples-per-prompt 8 "
         "--rollout-max-response-len 8192 "
-        "--rollout-temperature 1 "
+        "--rollout-temperature 0.8 "
         "--global-batch-size 32 "
         "--balance-data "
     )
@@ -50,25 +52,24 @@ def execute():
         "--sequence-parallel "
         "--pipeline-model-parallel-size 1 "
         "--context-parallel-size 2 "
-        "--expert-model-parallel-size 1 "
-        "--expert-tensor-parallel-size 1 "
         "--recompute-granularity full "
         "--recompute-method uniform "
         "--recompute-num-layers 1 "
         "--use-dynamic-batch-size "
-        f"--max-tokens-per-gpu {2048 if TIGHT_DEVICE_MEMORY else 4608} "
+        f"--max-tokens-per-gpu {2048 if TIGHT_HOST_MEMORY else 16384} "
     )
 
-    grpo_args = (
-        "--advantage-estimator grpo "
-        "--use-kl-loss "
+    ppo_args = (
+        "--advantage-estimator ppo "
+        f"{'' if TIGHT_HOST_MEMORY else '--use-kl-loss '}"
         "--kl-loss-coef 0.00 "
-        "--kl-loss-type low_var_kl "
+        "--kl-loss-type k1 "
+        "--kl-coef 0.00 "
         "--entropy-coef 0.00 "
-        "--eps-clip 0.2 "
-        "--eps-clip-high 0.28 "
-        "--use-tis "
-        "--calculate-per-token-loss "
+        "--eps-clip 4e-4 "
+        "--num-critic-only-steps 1 "
+        "--normalize-advantages "
+        "--critic-lr 1e-5 "
     )
 
     optimizer_args = (
@@ -80,7 +81,13 @@ def execute():
         "--adam-beta2 0.98 "
     )
 
-    sglang_args = "--rollout-num-gpus-per-engine 2 " "--use-miles-router "
+    sglang_args = (
+        "--rollout-num-gpus-per-engine 2 "
+        "--rollout-num-gpus 8 "
+        "--sglang-mem-fraction-static 0.8 "
+        "--sglang-max-running-requests 512 "
+        "--sglang-enable-metrics "
+    )
 
     ci_args = "--ci-test "
 
@@ -95,14 +102,14 @@ def execute():
         "--attention-backend flash "
         "--actor-num-nodes 1 "
         "--actor-num-gpus-per-node 4 "
-        "--rollout-num-gpus 4 "
+        "--colocate "
     )
 
     train_args = (
         f"{ckpt_args} "
         f"{rollout_args} "
         f"{optimizer_args} "
-        f"{grpo_args} "
+        f"{ppo_args} "
         f"{U.get_default_wandb_args(__file__)} "
         f"{perf_args} "
         f"{eval_args} "

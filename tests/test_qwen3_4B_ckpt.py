@@ -1,25 +1,45 @@
 import os
+from argparse import ArgumentParser
+
 import miles.utils.external_utils.command_utils as U
 
-ENABLE_EVAL = U.get_bool_env_var("MILES_TEST_ENABLE_EVAL", "1")
-TIGHT_DEVICE_MEMORY = U.get_bool_env_var("MILES_TEST_TIGHT_DEVICE_MEMORY", "1")
 
-MODEL_NAME = "GLM-Z1-9B-0414"
-MODEL_TYPE = "glm4-9B"
+ENABLE_EVAL = bool(int(os.environ.get("MILES_TEST_ENABLE_EVAL", "1")))
+TIGHT_HOST_MEMORY = bool(int(os.environ.get("MILES_TEST_TIGHT_HOST_MEMORY", "1")))
+
+MODEL_NAME = "Qwen3-4B"
+MODEL_TYPE = "qwen3-4B"
 NUM_GPUS = 8
+
+
+parser = ArgumentParser()
+parser.add_argument("--async-save", action="store_true", help="Whether to test async save/load.")
 
 
 def prepare():
     U.exec_command("mkdir -p /root/models /root/datasets")
-    U.exec_command("hf download zai-org/GLM-Z1-9B-0414 --local-dir /root/models/GLM-Z1-9B-0414")
+    U.exec_command(f"hf download Qwen/{MODEL_NAME} --local-dir /root/models/{MODEL_NAME}")
+    U.exec_command(f"rm -rf /root/models/{MODEL_NAME}_miles")
     U.hf_download_dataset("zhuzilin/dapo-math-17k")
     U.hf_download_dataset("zhuzilin/aime-2024")
 
-    U.convert_checkpoint(model_name=MODEL_NAME, megatron_model_type=MODEL_TYPE, num_gpus_per_node=NUM_GPUS)
+    U.convert_checkpoint(
+        model_name=MODEL_NAME, megatron_model_type=MODEL_TYPE, num_gpus_per_node=NUM_GPUS, dir_dst="/root/models"
+    )
 
 
-def execute():
-    ckpt_args = f"--hf-checkpoint /root/models/{MODEL_NAME}/ " f"--ref-load /root/{MODEL_NAME}_torch_dist "
+def execute(mode: str = ""):
+    ckpt_args = f"--hf-checkpoint /root/models/{MODEL_NAME}/ " f"--ref-load /root/models/{MODEL_NAME}_torch_dist "
+    if mode == "save":
+        ckpt_args += f"--save /root/models/{MODEL_NAME}_miles "
+        ckpt_args += "--save-interval 2 "
+    elif mode == "async_save":
+        ckpt_args += f"--save /root/models/{MODEL_NAME}_miles "
+        ckpt_args += "--save-interval 2 "
+        ckpt_args += "--async-save "
+    elif mode == "load":
+        ckpt_args += f"--load /root/models/{MODEL_NAME}_miles "
+        ckpt_args += "--ckpt-step 1 "
 
     rollout_args = (
         "--prompt-data /root/datasets/dapo-math-17k/dapo-math-17k.jsonl "
@@ -29,20 +49,12 @@ def execute():
         "--rollout-shuffle "
         "--rm-type deepscaler "
         "--num-rollout 3 "
-        "--rollout-batch-size 8 "
+        "--rollout-batch-size 4 "
         "--n-samples-per-prompt 8 "
-        "--rollout-max-response-len 8192 "
-        "--rollout-temperature 1 "
+        "--rollout-max-response-len 1024 "
+        "--rollout-temperature 0.8 "
         "--global-batch-size 32 "
         "--balance-data "
-    )
-
-    eval_args = (
-        f"{'--eval-interval 20 ' if ENABLE_EVAL else ''}"
-        "--eval-prompt-data aime24 /root/datasets/aime-2024/aime-2024.jsonl "
-        "--n-samples-per-eval-prompt 1 "
-        "--eval-max-response-len 16384 "
-        "--eval-top-k 1 "
     )
 
     perf_args = (
@@ -50,25 +62,20 @@ def execute():
         "--sequence-parallel "
         "--pipeline-model-parallel-size 1 "
         "--context-parallel-size 2 "
-        "--expert-model-parallel-size 1 "
-        "--expert-tensor-parallel-size 1 "
         "--recompute-granularity full "
         "--recompute-method uniform "
         "--recompute-num-layers 1 "
         "--use-dynamic-batch-size "
-        f"--max-tokens-per-gpu {2048 if TIGHT_DEVICE_MEMORY else 4608} "
+        f"--max-tokens-per-gpu {2048 if TIGHT_HOST_MEMORY else 16384} "
     )
 
-    grpo_args = (
+    ppo_args = (
         "--advantage-estimator grpo "
-        "--use-kl-loss "
         "--kl-loss-coef 0.00 "
-        "--kl-loss-type low_var_kl "
+        "--kl-loss-type k1 "
+        "--kl-coef 0.00 "
         "--entropy-coef 0.00 "
         "--eps-clip 0.2 "
-        "--eps-clip-high 0.28 "
-        "--use-tis "
-        "--calculate-per-token-loss "
     )
 
     optimizer_args = (
@@ -78,9 +85,12 @@ def execute():
         "--weight-decay 0.1 "
         "--adam-beta1 0.9 "
         "--adam-beta2 0.98 "
+        "--optimizer-cpu-offload "
+        "--overlap-cpu-optimizer-d2h-h2d "
+        "--use-precision-aware-optimizer "
     )
 
-    sglang_args = "--rollout-num-gpus-per-engine 2 " "--use-miles-router "
+    sglang_args = "--rollout-num-gpus-per-engine 2 --sglang-mem-fraction-static 0.8 --sglang-cuda-graph-bs 1 2 4 8 16 "
 
     ci_args = "--ci-test "
 
@@ -94,18 +104,17 @@ def execute():
         # need to comment this when using model with MLA
         "--attention-backend flash "
         "--actor-num-nodes 1 "
-        "--actor-num-gpus-per-node 4 "
-        "--rollout-num-gpus 4 "
+        "--actor-num-gpus-per-node 8 "
+        "--colocate "
     )
 
     train_args = (
         f"{ckpt_args} "
         f"{rollout_args} "
         f"{optimizer_args} "
-        f"{grpo_args} "
+        f"{ppo_args} "
         f"{U.get_default_wandb_args(__file__)} "
         f"{perf_args} "
-        f"{eval_args} "
         f"{sglang_args} "
         f"{ci_args} "
         f"{misc_args} "
@@ -119,8 +128,10 @@ def execute():
 
 
 if __name__ == "__main__":
+    args = parser.parse_args()
     # TODO also use typer
     prepare()
     for proxy_var in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
         os.environ.pop(proxy_var, None)
-    execute()
+    execute("save" if not args.async_save else "async_save")
+    execute("load")
