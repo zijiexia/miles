@@ -149,7 +149,7 @@ class SelectorAgent(Agent):
 
     def extract_selected_solution_idx(self, response: str, candidate_solutions: list[str]) -> int:
         """Extracts the selected solution ID from the response."""
-        PATTERN = re.compile("Judgment:\\s*(\\d+)")
+        PATTERN = re.compile(r"Judgment:\s*(\d+)")
         matched = PATTERN.findall(response)
         try:
             selected_id = int(matched[0]) - 1
