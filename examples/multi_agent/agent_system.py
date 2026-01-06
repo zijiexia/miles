@@ -20,7 +20,7 @@ async def generate_response(args, prompt, key):
 
         url = f"http://{args.sglang_router_ip}:{args.sglang_router_port}/generate"
 
-        if isinstance(prompt, list): 
+        if isinstance(prompt, list):
             prompt_text = tokenizer.apply_chat_template(
                 prompt,
                 tokenize=False,
