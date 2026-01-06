@@ -10,7 +10,7 @@ This directory contains an example of training a model to solve formal math prob
 
 ## Prerequisites
 
-### 1. Docker Setup
+### Docker Setup
 You need Docker installed and a specific network for communication between the training process and the Kimina verifier:
 
 ```bash
@@ -20,7 +20,7 @@ docker network create formal_math
 
 **Note**: The training script will launch a `kimina-lean-server` container. It requires mounting the host Docker socket (`/var/run/docker.sock`) so the script can manage sibling containers. Connect miles container to the same docker network.
 
-### 2. Install Dependencies
+### Install Dependencies
 
 ```bash
 apt update && apt install -y docker-cli
@@ -31,21 +31,21 @@ pip install kimina-client polars
 
 This minimal demo (`run_minimal.py`) runs a self-contained training loop on a small dataset.
 
-### 1. Prepare Data
+### Prepare Data
 Download and process the data (e.g., FineLeanCorpus, MiniF2F).
 
 ```bash
 python examples/formal_math/single_round/prepare_data.py --output-name minimal_demo
 ```
 
-### 2. Prepare Models & Environment
+### Prepare Models & Environment
 Use `run.py` to download the base model (e.g., Qwen3-8B) and set up the environment. We skip the actual training submission here (`MILES_SCRIPT_ENABLE_RAY_SUBMIT=0`) as we will use the minimal runner next.
 
 ```bash
 MILES_SCRIPT_ENABLE_RAY_SUBMIT=0 python examples/formal_math/single_round/run.py
 ```
 
-### 3. Run Training
+### Run Training
 Launch the minimal training script.
 
 ```bash
