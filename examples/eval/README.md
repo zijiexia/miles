@@ -16,7 +16,7 @@ The setup allows Miles to delegate evaluation tasks to a dedicated "Skills" serv
 
 ## Setup Instructions
 
-### 1. Prepare Host Network
+### Prepare Host Network
 
 Create a Docker network to allow communication between the Miles and Skills containers.
 
@@ -24,7 +24,7 @@ Create a Docker network to allow communication between the Miles and Skills cont
 docker network create skills-net
 ```
 
-### 2. Launch the Miles Container
+### Launch the Miles Container
 
 Start the main container where Miles and the model will run. Replace `<miles container name>` with your desired name (e.g., `miles_main`).
 
@@ -43,7 +43,7 @@ docker run \
   /bin/bash
 ```
 
-### 3. Launch the Skills Container
+### Launch the Skills Container
 
 Start the container that will run the evaluation benchmarks. Replace `<env container name>` with your desired name (e.g., `skills_env`).
 
@@ -63,7 +63,7 @@ docker run \
   /bin/bash
 ```
 
-### 4. Configure the Skills Container
+### Configure the Skills Container
 
 Enter the **Skills container** and set up the environment.
 
@@ -111,7 +111,7 @@ python examples/eval/nemo_skills/skills_server.py \
 
 The example scripts are located in `examples/eval/scripts`. Here is an example workflow for training Qwen3-4B with delegated evaluation.
 
-### 1. Prepare Miles Container
+### Prepare Miles Container
 
 Enter the **Miles container** and install the package.
 
@@ -121,7 +121,7 @@ git pull
 pip install -e .
 ```
 
-### 2. Download Model and Data
+### Download Model and Data
 
 ```bash
 # Download model weights (Qwen3-4B)
@@ -132,7 +132,7 @@ hf download --repo-type dataset zhuzilin/dapo-math-17k \
   --local-dir /root/dapo-math-17k
 ```
 
-### 3. Convert Model to Megatron-LM Format
+### Convert Model to Megatron-LM Format
 
 You need to convert the HF model to the format required by Megatron-LM. Ensure you load the correct model arguments first.
 
